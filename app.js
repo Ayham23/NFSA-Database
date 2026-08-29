@@ -357,9 +357,22 @@ document.getElementById('nav-followups').addEventListener('click', async () => {
 });
 
 // ---------- Init ----------
+function hideSplash() {
+  const splash = document.getElementById('splash');
+  if (splash) splash.classList.add('hidden');
+}
+
 (async function init() {
-  await openDB();
-  populateFilters();
-  runSearch();
-  showScreen('search');
+  const statusEl = document.getElementById('splash-status');
+  try {
+    if (statusEl) statusEl.textContent = 'جاري فتح قاعدة البيانات...';
+    await openDB();
+    if (statusEl) statusEl.textContent = `جاري تجهيز ${F.length.toLocaleString('ar-EG')} منشأة...`;
+    populateFilters();
+    runSearch();
+    showScreen('search');
+  } finally {
+    // small delay so the splash doesn't just flash on fast loads
+    setTimeout(hideSplash, 350);
+  }
 })();
