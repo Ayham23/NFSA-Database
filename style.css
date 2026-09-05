@@ -74,6 +74,30 @@ html, body {
   font-weight: 500;
 }
 
+.sync-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 10px;
+  border-radius: 3px;
+  font-size: 11.5px;
+  font-weight: 700;
+  width: fit-content;
+}
+.sync-badge.hidden { display: none; }
+.sync-badge .icon { font-size: 13px; }
+.sync-badge.offline {
+  background: rgba(161,60,42,0.18);
+  color: #f3c9bc;
+}
+.sync-badge.syncing {
+  background: rgba(169,127,46,0.22);
+  color: var(--gold-soft);
+}
+.sync-badge.syncing .icon svg { animation: sync-spin 1s linear infinite; }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+
 /* Screens */
 .screen {
   flex: 1;

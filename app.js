@@ -23,17 +23,57 @@ function getInspectorName() {
   return localStorage.getItem('last_inspector') || 'غير معروف';
 }
 
+// ---------- Sync status tracking ----------
+// A write's promise only resolves once Firestore confirms it reached the
+// server — while offline it stays pending, which is exactly what we want
+// to detect "saved locally, not yet synced to the team".
+let pendingWrites = 0;
+
+function trackWrite(promise) {
+  pendingWrites++;
+  updateSyncBadge();
+  const settle = () => { pendingWrites--; updateSyncBadge(); };
+  promise.then(settle, settle);
+  return promise;
+}
+
+function updateSyncBadge() {
+  const badge = document.getElementById('sync-badge');
+  const iconEl = document.getElementById('sync-badge-icon');
+  const textEl = document.getElementById('sync-badge-text');
+  if (!badge) return;
+
+  if (!navigator.onLine) {
+    badge.className = 'sync-badge offline';
+    iconEl.innerHTML = ICONS.offline;
+    textEl.textContent = pendingWrites > 0
+      ? `غير متصل — سيتم حفظ ${pendingWrites} تغييرات عند الاتصال`
+      : 'غير متصل — سيتم الحفظ عند الاتصال';
+  } else if (pendingWrites > 0) {
+    badge.className = 'sync-badge syncing';
+    iconEl.innerHTML = ICONS.sync;
+    textEl.textContent = 'جارٍ المزامنة مع الفريق...';
+  } else {
+    badge.className = 'sync-badge hidden';
+    return;
+  }
+  badge.classList.remove('hidden');
+}
+
+window.addEventListener('online', updateSyncBadge);
+window.addEventListener('offline', updateSyncBadge);
+
 // --- Danger flags: shared collection 'dangerFlags', doc id = facility_code ---
 function setDangerFlag(code, flagged) {
   const ref = fdb.collection('dangerFlags').doc(code);
-  if (flagged) {
-    return ref.set({
-      facility_code: code,
-      date: new Date().toISOString().slice(0, 10),
-      by: getInspectorName(),
-    });
-  }
-  return ref.delete();
+  const write = flagged
+    ? ref.set({
+        facility_code: code,
+        date: new Date().toISOString().slice(0, 10),
+        by: getInspectorName(),
+      })
+    : ref.delete();
+  return trackWrite(write);
 }
 
 function getAllDangerFlagCodes() {
@@ -50,11 +90,12 @@ function listenDangerFlags(onChange) {
 
 // --- Follow-up dates: shared collection 'followups', doc id = facility_code ---
 function setLastFollowup(code, dateStr) {
-  return fdb.collection('followups').doc(code).set({
+  const write = fdb.collection('followups').doc(code).set({
     facility_code: code,
     date: dateStr,
     by: getInspectorName(),
   });
+  return trackWrite(write);
 }
 
 function getLastFollowup(code) {
@@ -63,7 +104,7 @@ function getLastFollowup(code) {
 
 // --- Inspection visits: shared collection 'inspections' ---
 function addInspection(record) {
-  return fdb.collection('inspections').add(record).then(ref => ref.id);
+  return trackWrite(fdb.collection('inspections').add(record).then(ref => ref.id));
 }
 
 function getAllInspections() {
@@ -86,7 +127,7 @@ function getInspectionById(id) {
 
 function updateInspection(record) {
   const { id, ...data } = record;
-  return fdb.collection('inspections').doc(id).set(data);
+  return trackWrite(fdb.collection('inspections').doc(id).set(data));
 }
 
 // ---------- Data helpers ----------
@@ -465,6 +506,7 @@ function hideSplash() {
     populateFilters();
     runSearch();
     showScreen('search');
+    updateSyncBadge();
 
     // Live sync: any device's danger-flag change reflects here automatically.
     listenDangerFlags((newSet) => {
