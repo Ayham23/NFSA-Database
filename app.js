@@ -1,63 +1,92 @@
-// ---------- IndexedDB setup ----------
-const DB_NAME = 'nfsa_inspector_db';
-const DB_VERSION = 1;
-let db;
+// ---------- Firestore setup (shared team data) ----------
+let fdb; // firestore instance
+let firestoreReady = false;
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const _db = e.target.result;
-      if (!_db.objectStoreNames.contains('inspections')) {
-        const store = _db.createObjectStore('inspections', { keyPath: 'id', autoIncrement: true });
-        store.createIndex('facility_code', 'facility_code', { unique: false });
-        store.createIndex('date', 'date', { unique: false });
-        store.createIndex('followup_status', 'followup_status', { unique: false });
-      }
-    };
-    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
-    req.onerror = (e) => reject(e);
+    try {
+      firebase.initializeApp(firebaseConfig);
+      fdb = firebase.firestore();
+      // Allows the app to keep working offline and sync automatically once back online.
+      fdb.enablePersistence({ synchronizeTabs: true }).catch(() => {
+        // persistence can fail in some browser contexts (private mode, multiple tabs) — app still works online.
+      });
+      firestoreReady = true;
+      resolve();
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
-function addInspection(record) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('inspections', 'readwrite');
-    const store = tx.objectStore('inspections');
-    const req = store.add(record);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = (e) => reject(e);
+function getInspectorName() {
+  return localStorage.getItem('last_inspector') || 'غير معروف';
+}
+
+// --- Danger flags: shared collection 'dangerFlags', doc id = facility_code ---
+function setDangerFlag(code, flagged) {
+  const ref = fdb.collection('dangerFlags').doc(code);
+  if (flagged) {
+    return ref.set({
+      facility_code: code,
+      date: new Date().toISOString().slice(0, 10),
+      by: getInspectorName(),
+    });
+  }
+  return ref.delete();
+}
+
+function getAllDangerFlagCodes() {
+  return fdb.collection('dangerFlags').get().then(snap => snap.docs.map(d => d.id));
+}
+
+// Live updates: keeps every device's in-memory set in sync as flags change anywhere on the team.
+function listenDangerFlags(onChange) {
+  return fdb.collection('dangerFlags').onSnapshot(snap => {
+    const codes = snap.docs.map(d => d.id);
+    onChange(new Set(codes));
   });
+}
+
+// --- Follow-up dates: shared collection 'followups', doc id = facility_code ---
+function setLastFollowup(code, dateStr) {
+  return fdb.collection('followups').doc(code).set({
+    facility_code: code,
+    date: dateStr,
+    by: getInspectorName(),
+  });
+}
+
+function getLastFollowup(code) {
+  return fdb.collection('followups').doc(code).get().then(doc => (doc.exists ? doc.data() : null));
+}
+
+// --- Inspection visits: shared collection 'inspections' ---
+function addInspection(record) {
+  return fdb.collection('inspections').add(record).then(ref => ref.id);
 }
 
 function getAllInspections() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('inspections', 'readonly');
-    const store = tx.objectStore('inspections');
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result.reverse());
-    req.onerror = (e) => reject(e);
-  });
+  return fdb.collection('inspections').orderBy('created_at', 'desc').get()
+    .then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
 }
 
 function getInspectionsForFacility(code) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('inspections', 'readonly');
-    const idx = tx.objectStore('inspections').index('facility_code');
-    const req = idx.getAll(code);
-    req.onsuccess = () => resolve(req.result.reverse());
-    req.onerror = (e) => reject(e);
-  });
+  return fdb.collection('inspections')
+    .where('facility_code', '==', code)
+    .orderBy('created_at', 'desc')
+    .get()
+    .then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
+}
+
+function getInspectionById(id) {
+  return fdb.collection('inspections').doc(id).get()
+    .then(doc => (doc.exists ? { id: doc.id, ...doc.data() } : null));
 }
 
 function updateInspection(record) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('inspections', 'readwrite');
-    const store = tx.objectStore('inspections');
-    const req = store.put(record);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = (e) => reject(e);
-  });
+  const { id, ...data } = record;
+  return fdb.collection('inspections').doc(id).set(data);
 }
 
 // ---------- Data helpers ----------
@@ -86,13 +115,13 @@ let currentFacility = null;
 let searchQuery = '';
 let filterCenter = '';
 let filterRisk = '';
+let dangerFlaggedCodes = new Set();
 
 // ---------- Screen elements ----------
 const screens = {
   search: document.getElementById('screen-search'),
   detail: document.getElementById('screen-detail'),
   form: document.getElementById('screen-form'),
-  followups: document.getElementById('screen-followups'),
 };
 
 function showScreen(name) {
@@ -100,7 +129,7 @@ function showScreen(name) {
   screens[name].classList.remove('hidden');
   currentScreen = name;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  const navMap = { search: 'nav-search', followups: 'nav-followups' };
+  const navMap = { search: 'nav-search' };
   if (navMap[name]) document.getElementById(navMap[name]).classList.add('active');
   document.getElementById('app-screens').scrollTop = 0;
 }
@@ -154,18 +183,22 @@ function renderList(results, isFiltered) {
   const capped = results.slice(0, 200);
   const frag = document.createDocumentFragment();
   capped.forEach(f => {
+    const code = f['كود المنشأة'];
+    const isDanger = dangerFlaggedCodes.has(code);
     const card = document.createElement('div');
-    card.className = 'facility-card';
+    card.className = `facility-card risk-${riskClass(f['مستوى الخطورة'])}${isDanger ? ' is-danger' : ''}`;
     card.innerHTML = `
-      <span class="risk-dot risk-${riskClass(f['مستوى الخطورة'])}"></span>
-      <div class="facility-main">
-        <p class="facility-name">${escapeHtml(f['اسم المنشأة'] || 'بدون اسم')}</p>
-        <div class="facility-meta">
-          <span>${escapeHtml(f['مركز'] || '')}</span>
-          <span>${escapeHtml(f['نشاط الفرع'] || '').split('-')[0] || ''}</span>
+      ${isDanger ? `<div class="danger-strip">${icon('warning')} يوجد خطر داهم</div>` : ''}
+      <div class="facility-card-row">
+        <div class="facility-main">
+          <p class="facility-name">${escapeHtml(f['اسم المنشأة'] || 'بدون اسم')}</p>
+          <div class="facility-meta">
+            <span>${icon('building')}${escapeHtml(f['مركز'] || '')}</span>
+            <span>${escapeHtml(f['نشاط الفرع'] || '').split('-')[0] || ''}</span>
+          </div>
         </div>
+        <span class="facility-code">${escapeHtml(f['كود المنشأة'] || '')}</span>
       </div>
-      <span class="facility-code">${escapeHtml(f['كود المنشأة'] || '')}</span>
     `;
     card.addEventListener('click', () => openDetail(f['كود المنشأة']));
     frag.appendChild(card);
@@ -197,34 +230,37 @@ document.getElementById('filter-risk').addEventListener('change', (e) => {
 });
 
 // ---------- Detail screen ----------
-async function openDetail(code) {
+async function openDetail(code, push = true) {
   const f = byCode[code];
   if (!f) return;
   currentFacility = f;
 
   document.getElementById('detail-name').textContent = f['اسم المنشأة'] || 'بدون اسم';
   const badge = document.getElementById('detail-risk-badge');
-  badge.textContent = `خطورة ${riskLabelAr(f['مستوى الخطورة'])}`;
+  badge.innerHTML = `${icon('shield')} خطورة ${riskLabelAr(f['مستوى الخطورة'])}`;
   badge.className = `risk-badge badge-${riskClass(f['مستوى الخطورة'])}`;
 
+  await renderFollowupBox(code);
+  renderDangerState(code);
+
   const rows = [
-    ['الكود', f['كود المنشأة']],
-    ['المركز', f['مركز']],
-    ['العنوان', f['العنوان']],
-    ['النشاط', f['نشاط الفرع']],
-    ['المجموعة الغذائية', f['المجموعة الغذائية']],
-    ['المسؤول', f['المرافقون']],
-    ['الهاتف', f['الهاتف']],
-    ['تاريخ آخر مأمورية', f['تاريخ المأمورية']],
-    ['سجل تجاري', f['سجل تجاري']],
-    ['رقم السجل التجاري', f['رقم السجل التجاري']],
-    ['وجود رخصة', f['وجود رخصه']],
-    ['رقم الرخصة', f['رقم الرخصه']],
+    ['الكود', f['كود المنشأة'], null],
+    ['المركز', f['مركز'], 'building'],
+    ['العنوان', f['العنوان'], 'pin'],
+    ['النشاط', f['نشاط الفرع'], null],
+    ['المجموعة الغذائية', f['المجموعة الغذائية'], null],
+    ['المسؤول', f['المرافقون'], null],
+    ['الهاتف', f['الهاتف'], 'phone'],
+    ['تاريخ آخر مأمورية', f['تاريخ المأمورية'], 'calendar'],
+    ['سجل تجاري', f['سجل تجاري'], null],
+    ['رقم السجل التجاري', f['رقم السجل التجاري'], null],
+    ['وجود رخصة', f['وجود رخصه'], 'license'],
+    ['رقم الرخصة', f['رقم الرخصه'], null],
   ];
   const grid = document.getElementById('detail-info-grid');
-  grid.innerHTML = rows.map(([label, val]) => `
+  grid.innerHTML = rows.map(([label, val, ic]) => `
     <div class="info-row">
-      <div class="info-label">${label}</div>
+      <div class="info-label">${ic ? icon(ic) : ''}${label}</div>
       <div class="info-value ${!val ? 'empty' : ''}">${escapeHtml(val || 'غير مسجل')}</div>
     </div>
   `).join('');
@@ -237,25 +273,89 @@ async function openDetail(code) {
   } else {
     logWrap.innerHTML = logs.map(l => `
       <div class="log-card">
-        <div class="log-date">${l.date || ''}</div>
+        <div class="log-date">${icon('calendar')}${l.date || ''}</div>
         <div class="log-notes">${escapeHtml(l.notes || 'بدون ملاحظات')}</div>
-        <span class="log-tag">خطورة: ${riskLabelAr(l.risk_assessed)}</span>
-        <span class="log-tag">${l.followup_status === 'closed' ? 'تمت المتابعة' : 'متابعة مطلوبة'}</span>
+        <span class="log-tag">${icon('shield')} خطورة: ${riskLabelAr(l.risk_assessed)}</span>
+        <span class="log-tag">${l.followup_status === 'closed' ? icon('check') + ' تمت المتابعة' : icon('clock') + ' متابعة مطلوبة'}</span>
       </div>
     `).join('');
   }
 
   showScreen('detail');
+  if (push) {
+    history.pushState({ screen: 'detail', code }, '', '#' + encodeURIComponent(code));
+  }
 }
 
-document.getElementById('back-from-detail').addEventListener('click', () => showScreen('search'));
+document.getElementById('back-from-detail').addEventListener('click', () => history.back());
 document.getElementById('btn-new-inspection').addEventListener('click', () => openForm(currentFacility['كود المنشأة']));
+
+// ---------- Follow-up date tracking ----------
+function formatDateAr(dateStr) {
+  // dateStr is YYYY-MM-DD
+  const [y, m, d] = dateStr.split('-');
+  const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  return `${Number(d)} ${months[Number(m) - 1]} ${y}`;
+}
+
+async function renderFollowupBox(code) {
+  const record = await getLastFollowup(code);
+  const textEl = document.getElementById('followup-date-text');
+  const infoEl = document.querySelector('#followup-box .followup-info');
+  const btn = document.getElementById('btn-mark-followup');
+
+  if (record && record.date) {
+    textEl.textContent = `آخر متابعة: ${formatDateAr(record.date)}`;
+    infoEl.classList.add('done');
+    btn.textContent = 'تحديث المتابعة لليوم';
+    btn.classList.add('done');
+  } else {
+    textEl.textContent = 'لم تتم متابعتها بعد';
+    infoEl.classList.remove('done');
+    btn.textContent = 'تم المتابعة اليوم';
+    btn.classList.remove('done');
+  }
+}
+
+document.getElementById('btn-mark-followup').addEventListener('click', async () => {
+  if (!currentFacility) return;
+  const code = currentFacility['كود المنشأة'];
+  const today = new Date().toISOString().slice(0, 10);
+  await setLastFollowup(code, today);
+  await renderFollowupBox(code);
+  toast('تم تسجيل المتابعة لهذا اليوم');
+});
+
+// ---------- Danger flag ----------
+function renderDangerState(code) {
+  const flagged = dangerFlaggedCodes.has(code);
+  const note = document.getElementById('danger-note');
+  const btn = document.getElementById('btn-toggle-danger');
+  note.classList.toggle('hidden', !flagged);
+  btn.textContent = flagged ? 'ازالة الخطر الداهم' : 'يوجد خطر داهم';
+  btn.classList.toggle('flagged', flagged);
+}
+
+document.getElementById('btn-toggle-danger').addEventListener('click', async () => {
+  if (!currentFacility) return;
+  const code = currentFacility['كود المنشأة'];
+  const flagged = dangerFlaggedCodes.has(code);
+  await setDangerFlag(code, !flagged);
+  if (flagged) {
+    dangerFlaggedCodes.delete(code);
+    toast('تم إزالة تنبيه الخطر الداهم');
+  } else {
+    dangerFlaggedCodes.add(code);
+    toast('تم تسجيل خطر داهم لهذه المنشأة');
+  }
+  renderDangerState(code);
+});
 
 // ---------- Form screen (new inspection / follow-up) ----------
 let selectedRisk = null;
 let editingInspectionId = null;
 
-function openForm(code, existing) {
+function openForm(code, existing, push = true) {
   const f = byCode[code];
   document.getElementById('form-facility-name').textContent = f ? f['اسم المنشأة'] : code;
   document.getElementById('form-facility-code').textContent = code;
@@ -268,6 +368,9 @@ function openForm(code, existing) {
   document.getElementById('form-title').textContent = existing ? 'تعديل الزيارة' : 'تسجيل زيارة جديدة';
   renderRiskOptions();
   showScreen('form');
+  if (push) {
+    history.pushState({ screen: 'form', code, existingId: existing ? existing.id : null }, '', '#' + encodeURIComponent(code) + '/visit');
+  }
 }
 
 function renderRiskOptions() {
@@ -284,7 +387,7 @@ function renderRiskOptions() {
   });
 }
 
-document.getElementById('back-from-form').addEventListener('click', () => showScreen('detail'));
+document.getElementById('back-from-form').addEventListener('click', () => history.back());
 
 document.getElementById('inspection-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -312,48 +415,36 @@ document.getElementById('inspection-form').addEventListener('submit', async (e) 
     await addInspection(record);
     toast('تم حفظ الزيارة');
   }
-  await openDetail(currentFacility['كود المنشأة']);
+  await openDetail(currentFacility['كود المنشأة'], false);
 });
 
-// ---------- Follow-ups screen ----------
-async function renderFollowups() {
-  const all = await getAllInspections();
-  const open = all.filter(l => l.followup_status !== 'closed');
-  document.getElementById('stat-total').textContent = all.length.toLocaleString('ar-EG');
-  document.getElementById('stat-open').textContent = open.length.toLocaleString('ar-EG');
-  document.getElementById('stat-closed').textContent = (all.length - open.length).toLocaleString('ar-EG');
+document.getElementById('nav-search').addEventListener('click', () => {
+  if (currentScreen !== 'search') {
+    history.pushState({ screen: 'search' }, '', '#');
+  }
+  showScreen('search');
+});
 
-  const wrap = document.getElementById('followups-list');
-  if (all.length === 0) {
-    wrap.innerHTML = `<div class="empty-state">لم تُسجَّل أي زيارات على هذا الجهاز بعد.<br>ابحث عن منشأة وسجّل زيارة لتظهر هنا.</div>`;
+window.addEventListener('popstate', async (e) => {
+  const state = e.state;
+  if (!state || state.screen === 'search') {
+    showScreen('search');
     return;
   }
-  wrap.innerHTML = all.map(l => `
-    <div class="log-card" data-id="${l.id}">
-      <p class="facility-name" style="margin-bottom:4px;">${escapeHtml(l.facility_name || l.facility_code)}</p>
-      <div class="log-date">${l.center || ''} • ${l.date || ''} • ${escapeHtml(l.inspector || '')}</div>
-      <div class="log-notes">${escapeHtml(l.notes || 'بدون ملاحظات')}</div>
-      <span class="log-tag">خطورة: ${riskLabelAr(l.risk_assessed)}</span>
-      <span class="log-tag">${l.followup_status === 'closed' ? '✓ تمت المتابعة' : 'متابعة مطلوبة'}</span>
-    </div>
-  `).join('');
-  wrap.querySelectorAll('.log-card').forEach(el => {
-    el.addEventListener('click', async () => {
-      const id = Number(el.dataset.id);
-      const rec = all.find(x => x.id === id);
-      const f = byCode[rec.facility_code];
-      if (f) {
-        currentFacility = f;
-        openForm(rec.facility_code, rec);
-      }
-    });
-  });
-}
-
-document.getElementById('nav-search').addEventListener('click', () => showScreen('search'));
-document.getElementById('nav-followups').addEventListener('click', async () => {
-  await renderFollowups();
-  showScreen('followups');
+  if (state.screen === 'detail') {
+    await openDetail(state.code, false);
+    return;
+  }
+  if (state.screen === 'form') {
+    const f = byCode[state.code];
+    if (!f) { showScreen('search'); return; }
+    currentFacility = f;
+    let existing = null;
+    if (state.existingId) {
+      existing = await getInspectionById(state.existingId);
+    }
+    openForm(state.code, existing, false);
+  }
 });
 
 // ---------- Init ----------
@@ -363,16 +454,29 @@ function hideSplash() {
 }
 
 (async function init() {
+  history.replaceState({ screen: 'search' }, '', '#');
+  const MIN_SPLASH_MS = 7000;
+  const startTime = Date.now();
   const statusEl = document.getElementById('splash-status');
   try {
-    if (statusEl) statusEl.textContent = 'جاري فتح قاعدة البيانات...';
+    if (statusEl) statusEl.textContent = 'جاري الاتصال بقاعدة البيانات المشتركة...';
     await openDB();
     if (statusEl) statusEl.textContent = `جاري تجهيز ${F.length.toLocaleString('ar-EG')} منشأة...`;
     populateFilters();
     runSearch();
     showScreen('search');
+
+    // Live sync: any device's danger-flag change reflects here automatically.
+    listenDangerFlags((newSet) => {
+      dangerFlaggedCodes = newSet;
+      if (currentScreen === 'search') runSearch();
+      if (currentScreen === 'detail' && currentFacility) {
+        renderDangerState(currentFacility['كود المنشأة']);
+      }
+    });
   } finally {
-    // small delay so the splash doesn't just flash on fast loads
-    setTimeout(hideSplash, 350);
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
+    setTimeout(hideSplash, remaining);
   }
 })();

@@ -1,10 +1,13 @@
-const CACHE_NAME = 'nfsa-inspector-v1';
+const CACHE_NAME = 'nfsa-inspector-v5';
 const ASSETS = [
   './index.html',
   './style.css',
   './app.js',
+  './icons.js',
   './data.js',
   './manifest.json',
+  './logo.png',
+  './firebase-config.js',
 ];
 
 self.addEventListener('install', (event) => {

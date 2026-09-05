@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1e3d33">
+<meta name="theme-color" content="#1e3d1c">
 <title>مفتش الأغذية — القليوبية</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="style.css">
@@ -31,7 +31,10 @@
     <!-- SEARCH SCREEN -->
     <div id="screen-search">
       <div class="search-wrap">
-        <input type="text" id="search-input" class="search-input" placeholder="ابحث بالاسم أو الكود أو العنوان...">
+        <div class="search-box">
+          <input type="text" id="search-input" class="search-input" placeholder="ابحث بالاسم أو الكود أو العنوان...">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M20 20L15.2 15.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+        </div>
         <div class="filter-row">
           <select id="filter-center" class="filter-select">
             <option value="">كل المراكز</option>
@@ -51,14 +54,26 @@
     <!-- DETAIL SCREEN -->
     <div id="screen-detail" class="hidden">
       <div class="detail-header">
-        <button class="back-btn" id="back-from-detail">← رجوع للبحث</button>
+        <button class="back-btn" id="back-from-detail"><span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 6L8 12.5L14.5 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span> رجوع للبحث</button>
         <p class="detail-title" id="detail-name"></p>
         <span class="risk-badge" id="detail-risk-badge"></span>
       </div>
       <div class="detail-body">
+        <div class="danger-note hidden" id="danger-note">
+          <span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4L21.5 20.5H2.5L12 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10V14.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1" fill="currentColor"/></svg></span>
+          يوجد خطر داهم
+        </div>
+        <div class="followup-box" id="followup-box">
+          <div class="followup-info">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M12 7.5V12.3L15.2 14.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span id="followup-date-text">لم تتم متابعتها بعد</span>
+          </div>
+          <button class="btn-followup" id="btn-mark-followup">تم المتابعة اليوم</button>
+        </div>
+        <button class="btn-danger" id="btn-toggle-danger">يوجد خطر داهم</button>
         <div class="info-grid" id="detail-info-grid"></div>
-        <button class="btn-primary" id="btn-new-inspection">+ تسجيل زيارة تفتيش جديدة</button>
-        <p class="section-title" style="margin-top:20px;">الزيارات المسجّلة على هذا الجهاز</p>
+        <button class="btn-primary" id="btn-new-inspection"><span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span> تسجيل زيارة تفتيش جديدة</button>
+        <p class="section-title" style="margin-top:20px;"><span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5.5" y="4.5" width="13" height="16" rx="1.2" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="3" width="6" height="3" rx="0.8" stroke="currentColor" stroke-width="1.4"/><path d="M8.5 11H15.5M8.5 14.5H15.5M8.5 17.5H12.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span> الزيارات المسجّلة على هذا الجهاز</p>
         <div id="detail-logs"></div>
       </div>
     </div>
@@ -66,7 +81,7 @@
     <!-- FORM SCREEN -->
     <div id="screen-form" class="hidden">
       <div class="detail-header">
-        <button class="back-btn" id="back-from-form">← رجوع لبيانات المنشأة</button>
+        <button class="back-btn" id="back-from-form"><span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 6L8 12.5L14.5 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span> رجوع لبيانات المنشأة</button>
         <p class="detail-title" id="form-title">تسجيل زيارة جديدة</p>
         <p style="font-size:13px;color:var(--muted);margin:0;" id="form-facility-name"></p>
         <p class="facility-code" id="form-facility-code" style="margin-top:2px;"></p>
@@ -101,36 +116,22 @@
       </div>
     </div>
 
-    <!-- FOLLOWUPS SCREEN -->
-    <div id="screen-followups" class="hidden">
-      <div class="topbar" style="padding:14px 16px;">
-        <p class="topbar-title" style="font-size:15px;">الزيارات والمتابعات</p>
-      </div>
-      <div class="stat-row">
-        <div class="stat-box"><div class="stat-num" id="stat-total">0</div><div class="stat-label">إجمالي الزيارات</div></div>
-        <div class="stat-box"><div class="stat-num" id="stat-open">0</div><div class="stat-label">متابعة مطلوبة</div></div>
-        <div class="stat-box"><div class="stat-num" id="stat-closed">0</div><div class="stat-label">مغلقة</div></div>
-      </div>
-      <p class="section-title" style="padding:12px 14px 4px;">كل الزيارات المسجّلة</p>
-      <div id="followups-list" style="padding:0 14px;"></div>
-    </div>
-
   </div>
 
   <div class="bottom-nav">
     <button class="nav-btn active" id="nav-search">
-      <span class="nav-icon">🔍</span>
+      <span class="icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M20 20L15.2 15.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
       <span>البحث</span>
-    </button>
-    <button class="nav-btn" id="nav-followups">
-      <span class="nav-icon">📋</span>
-      <span>المتابعات</span>
     </button>
   </div>
 
   <div class="toast" id="toast"></div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="icons.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 <script>

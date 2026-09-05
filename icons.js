@@ -1,0 +1,20 @@
+// Custom line-icon set (stroke-based, consistent 1.6 weight) — replaces emoji throughout the app.
+const ICONS = {
+  search: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M20 20L15.2 15.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  back: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 6L8 12.5L14.5 19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  building: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="4" width="14" height="16" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M8.5 8H10.5M13.5 8H15.5M8.5 11.5H10.5M13.5 11.5H15.5M8.5 15H10.5M13.5 15H15.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  pin: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21C12 21 18.5 14.6 18.5 9.8C18.5 6.05 15.6 3 12 3C8.4 3 5.5 6.05 5.5 9.8C5.5 14.6 12 21 12 21Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="9.7" r="2.3" stroke="currentColor" stroke-width="1.4"/></svg>`,
+  phone: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 4.5C8 4.5 9.2 4.5 9.7 5.8C10.1 6.9 10.4 7.7 9.9 8.4C9.4 9.1 8.7 9.4 9.1 10.3C9.7 11.6 12.4 14.3 13.7 14.9C14.6 15.3 14.9 14.6 15.6 14.1C16.3 13.6 17.1 13.9 18.2 14.3C19.5 14.8 19.5 16 19.5 16C19.5 18 17.8 19.5 16 19.5C11 19.5 4.5 13 4.5 8C4.5 6.2 6 4.5 8 4.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  calendar: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="5.5" width="16" height="14.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M4 9.5H20" stroke="currentColor" stroke-width="1.5"/><path d="M8 3.5V6.5M16 3.5V6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  clipboard: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5.5" y="4.5" width="13" height="16" rx="1.2" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="3" width="6" height="3" rx="0.8" stroke="currentColor" stroke-width="1.4"/><path d="M8.5 11H15.5M8.5 14.5H15.5M8.5 17.5H12.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  shield: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.5L19 6.2V11C19 15.4 16 18.7 12 20.5C8 18.7 5 15.4 5 11V6.2L12 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12.5L9.5 17L19 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  clock: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M12 7.5V12.3L15.2 14.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  license: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="6" width="17" height="12" rx="1.3" stroke="currentColor" stroke-width="1.5"/><circle cx="8.2" cy="12" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M13 10H17.5M13 14H16" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  warning: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4L21.5 20.5H2.5L12 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10V14.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1" fill="currentColor"/></svg>`,
+};
+
+function icon(name, cls) {
+  return `<span class="icon ${cls || ''}">${ICONS[name] || ''}</span>`;
+}
